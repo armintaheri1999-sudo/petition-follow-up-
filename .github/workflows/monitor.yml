@@ -1,0 +1,52 @@
+name: OCW Petition Monitor
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ocw-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          COMMITTEE: "OCW"
+          KEYWORDS: "iran,iraanse,studenten,collegegeld,studiefinanciering,sanctie,internationale studenten"
+          SOORT_FILTER: "procedurevergadering,petitie,commissiedebat,e-mailprocedure,rondetafelgesprek,inbreng schriftelijk overleg"
+          STRICT_KEYWORDS: "1"
+          LOOKBACK_HOURS: "72"
+        run: python monitor.py
+
+      - name: Persist state
+        run: |
+          if [[ -n "$(git status --porcelain state.json)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add state.json
+            git commit -m "Update monitor state [skip ci]"
+            git push
+          else
+            echo "No state change to commit."
+          fi
